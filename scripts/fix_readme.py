@@ -1,4 +1,7 @@
-# EEG Cognitive Load Detection
+from pathlib import Path
+
+
+readme = r"""# EEG Cognitive Load Detection
 
 EEG cognitive load detection project with classical machine learning baselines, subject-independent validation, CNN modeling and a Streamlit demo.
 
@@ -358,3 +361,7 @@ streamlit run app/streamlit_app.py
 ## Resume summary
 
 Built an EEG cognitive load detection pipeline using spectral bandpower features and raw EEG CNN modeling. Implemented subject-independent validation, leakage analysis, feature importance visualization and an interactive Streamlit demo.
+"""
+
+Path("README.md").write_text(readme, encoding="utf-8")
+print("README.md fixed successfully.")
