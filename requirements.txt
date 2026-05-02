@@ -1,0 +1,13 @@
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+seaborn
+jupyter
+datasets==3.6.0
+mne
+torch
+tqdm
+joblib
+streamlit
