@@ -1,363 +1,140 @@
 from pathlib import Path
-import sys
 import json
+import sys
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
 import torch
-from torch.utils.data import Dataset, DataLoader
-import torch.nn as nn
-
-from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
     f1_score,
     roc_auc_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    classification_report,
 )
-
+from sklearn.model_selection import GroupShuffleSplit
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.models.eeg_cnn import EEGSimpleCNN
 
 
-RANDOM_STATE = 42
-BATCH_SIZE = 128
-N_EPOCHS = 15
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-4
+def normalize_windows(X: np.ndarray) -> np.ndarray:
+    mean = X.mean(axis=2, keepdims=True)
+    std = X.std(axis=2, keepdims=True) + 1e-6
+    return ((X - mean) / std).astype(np.float32)
 
 
-class EEGWindowDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = X.astype(np.float32)
-        self.y = y.astype(np.float32)
+def main() -> None:
+    data_path = PROJECT_ROOT / "data" / "processed" / "stew_kaggle_windows_binary.npz"
+    reports_dir = PROJECT_ROOT / "reports"
+    models_dir = PROJECT_ROOT / "models"
 
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        x = self.X[idx]
-
-        # Per-window, per-channel normalization
-        mean = x.mean(axis=1, keepdims=True)
-        std = x.std(axis=1, keepdims=True) + 1e-6
-        x = (x - mean) / std
-
-        y = self.y[idx]
-
-        return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
-
-
-def make_subject_split(X, y, groups):
-    outer_cv = StratifiedGroupKFold(
-        n_splits=5,
-        shuffle=True,
-        random_state=RANDOM_STATE,
-    )
-
-    train_val_idx, test_idx = next(outer_cv.split(X, y, groups))
-
-    X_train_val = X[train_val_idx]
-    y_train_val = y[train_val_idx]
-    groups_train_val = groups[train_val_idx]
-
-    inner_cv = StratifiedGroupKFold(
-        n_splits=4,
-        shuffle=True,
-        random_state=RANDOM_STATE,
-    )
-
-    inner_train_idx, val_idx = next(
-        inner_cv.split(X_train_val, y_train_val, groups_train_val)
-    )
-
-    train_idx = train_val_idx[inner_train_idx]
-    val_idx = train_val_idx[val_idx]
-
-    return train_idx, val_idx, test_idx
-
-
-def print_split_info(name, y, groups, idx):
-    print(f"\n{name}")
-    print("-" * 80)
-    print("Samples:", len(idx))
-    print("Subjects:", np.unique(groups[idx]))
-    print("Number of subjects:", len(np.unique(groups[idx])))
-    print("Class distribution:", np.unique(y[idx], return_counts=True))
-
-
-def train_one_epoch(model, loader, optimizer, criterion, device):
-    model.train()
-
-    total_loss = 0.0
-
-    for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
-        y_batch = y_batch.to(device)
-
-        optimizer.zero_grad()
-
-        logits = model(X_batch)
-        loss = criterion(logits, y_batch)
-
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item() * len(X_batch)
-
-    return total_loss / len(loader.dataset)
-
-
-def evaluate(model, loader, criterion, device):
-    model.eval()
-
-    total_loss = 0.0
-
-    all_y_true = []
-    all_y_proba = []
-
-    with torch.no_grad():
-        for X_batch, y_batch in loader:
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-
-            logits = model(X_batch)
-            loss = criterion(logits, y_batch)
-
-            proba = torch.sigmoid(logits)
-
-            total_loss += loss.item() * len(X_batch)
-
-            all_y_true.extend(y_batch.cpu().numpy().tolist())
-            all_y_proba.extend(proba.cpu().numpy().tolist())
-
-    y_true = np.array(all_y_true).astype(int)
-    y_proba = np.array(all_y_proba)
-    y_pred = (y_proba >= 0.5).astype(int)
-
-    metrics = {
-        "loss": total_loss / len(loader.dataset),
-        "accuracy": accuracy_score(y_true, y_pred),
-        "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
-        "macro_f1": f1_score(y_true, y_pred, average="macro"),
-        "weighted_f1": f1_score(y_true, y_pred, average="weighted"),
-    }
-
-    if len(np.unique(y_true)) == 2:
-        metrics["roc_auc"] = roc_auc_score(y_true, y_proba)
-    else:
-        metrics["roc_auc"] = np.nan
-
-    return metrics, y_true, y_pred, y_proba
-
-
-def plot_training_history(history, output_dir):
-    df = pd.DataFrame(history)
-
-    plt.figure(figsize=(8, 5))
-    plt.plot(df["epoch"], df["train_loss"], label="train_loss")
-    plt.plot(df["epoch"], df["val_loss"], label="val_loss")
-    plt.title("CNN training loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(output_dir / "cnn_subject_split_training_loss.png", dpi=150)
-    plt.close()
-
-    plt.figure(figsize=(8, 5))
-    plt.plot(df["epoch"], df["val_balanced_accuracy"], label="val_balanced_accuracy")
-    plt.plot(df["epoch"], df["val_roc_auc"], label="val_roc_auc")
-    plt.title("CNN validation metrics")
-    plt.xlabel("Epoch")
-    plt.ylabel("Score")
-    plt.ylim(0, 1)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(output_dir / "cnn_subject_split_validation_metrics.png", dpi=150)
-    plt.close()
-
-
-def plot_confusion_matrix(y_true, y_pred, output_dir):
-    cm = confusion_matrix(y_true, y_pred)
-
-    disp = ConfusionMatrixDisplay(
-        confusion_matrix=cm,
-        display_labels=["low load", "high load"],
-    )
-
-    disp.plot(values_format="d")
-    plt.title("CNN subject-independent test confusion matrix")
-    plt.tight_layout()
-    plt.savefig(output_dir / "cnn_subject_split_confusion_matrix.png", dpi=150)
-    plt.close()
-
-
-def main():
-    torch.manual_seed(RANDOM_STATE)
-    np.random.seed(RANDOM_STATE)
-
-    output_dir = Path("reports/figures")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    models_dir = Path("models")
+    reports_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    data = np.load("data/processed/stew_kaggle_windows_binary.npz")
+    if not data_path.exists():
+        raise FileNotFoundError(
+            "Missing data/processed/stew_kaggle_windows_binary.npz. "
+            "Run scripts/prepare_stew_kaggle.py first."
+        )
 
-    X = data["X"]
-    y = data["y"]
+    data = np.load(data_path)
+    X = normalize_windows(data["X"])
+    y = data["y"].astype(np.float32)
     groups = data["groups"]
 
-    print("Loaded data")
-    print("X:", X.shape)
-    print("y:", y.shape)
-    print("groups:", groups.shape)
-    print("Classes:", np.unique(y, return_counts=True))
-    print("Subjects:", len(np.unique(groups)))
+    splitter = GroupShuffleSplit(
+        n_splits=1,
+        test_size=0.25,
+        random_state=42,
+    )
 
-    train_idx, val_idx, test_idx = make_subject_split(X, y, groups)
+    train_idx, test_idx = next(splitter.split(X, y, groups=groups))
 
-    print_split_info("Train split", y, groups, train_idx)
-    print_split_info("Validation split", y, groups, val_idx)
-    print_split_info("Test split", y, groups, test_idx)
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
 
-    train_dataset = EEGWindowDataset(X[train_idx], y[train_idx])
-    val_dataset = EEGWindowDataset(X[val_idx], y[val_idx])
-    test_dataset = EEGWindowDataset(X[test_idx], y[test_idx])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train, dtype=torch.float32),
+    )
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=128,
         shuffle=True,
     )
 
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-    )
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("\nDevice:", device)
-
-    model = EEGSimpleCNN(n_channels=14, n_times=256).to(device)
-
+    model = EEGSimpleCNN(n_channels=X.shape[1], n_times=X.shape[2]).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
     criterion = nn.BCEWithLogitsLoss()
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
+    n_epochs = 8
+
+    for epoch in range(1, n_epochs + 1):
+        model.train()
+        losses = []
+
+        for batch_x, batch_y in train_loader:
+            batch_x = batch_x.to(device)
+            batch_y = batch_y.to(device)
+
+            optimizer.zero_grad()
+            logits = model(batch_x)
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            optimizer.step()
+
+            losses.append(float(loss.detach().cpu()))
+
+        print(f"Epoch {epoch}/{n_epochs} - loss: {np.mean(losses):.4f}")
+
+    model.eval()
+
+    with torch.no_grad():
+        test_tensor = torch.tensor(X_test, dtype=torch.float32).to(device)
+        logits = model(test_tensor).cpu().numpy()
+        probabilities = 1 / (1 + np.exp(-logits))
+
+    predictions = (probabilities >= 0.5).astype(int)
+
+    metrics = {
+        "validation": "subject_independent_group_shuffle_split",
+        "accuracy": float(accuracy_score(y_test, predictions)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_test, predictions)),
+        "macro_f1": float(f1_score(y_test, predictions, average="macro")),
+        "weighted_f1": float(f1_score(y_test, predictions, average="weighted")),
+        "roc_auc": float(roc_auc_score(y_test, probabilities)),
+        "n_train_windows": int(len(train_idx)),
+        "n_test_windows": int(len(test_idx)),
+    }
+
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "metrics": metrics,
+            "n_channels": int(X.shape[1]),
+            "n_times": int(X.shape[2]),
+        },
+        models_dir / "eeg_cnn_subject_split_binary.pt",
     )
 
-    best_val_balanced_accuracy = -1.0
-    best_model_path = models_dir / "eeg_cnn_subject_split_binary.pt"
-
-    history = []
-
-    for epoch in range(1, N_EPOCHS + 1):
-        train_loss = train_one_epoch(
-            model=model,
-            loader=train_loader,
-            optimizer=optimizer,
-            criterion=criterion,
-            device=device,
-        )
-
-        val_metrics, _, _, _ = evaluate(
-            model=model,
-            loader=val_loader,
-            criterion=criterion,
-            device=device,
-        )
-
-        row = {
-            "epoch": epoch,
-            "train_loss": train_loss,
-            "val_loss": val_metrics["loss"],
-            "val_accuracy": val_metrics["accuracy"],
-            "val_balanced_accuracy": val_metrics["balanced_accuracy"],
-            "val_macro_f1": val_metrics["macro_f1"],
-            "val_roc_auc": val_metrics["roc_auc"],
-        }
-
-        history.append(row)
-
-        print(json.dumps(row, indent=2))
-
-        if val_metrics["balanced_accuracy"] > best_val_balanced_accuracy:
-            best_val_balanced_accuracy = val_metrics["balanced_accuracy"]
-
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "epoch": epoch,
-                    "val_metrics": val_metrics,
-                },
-                best_model_path,
-            )
-
-    print("\nLoading best model:", best_model_path)
-
-    checkpoint = torch.load(best_model_path, map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-
-    test_metrics, y_true, y_pred, y_proba = evaluate(
-        model=model,
-        loader=test_loader,
-        criterion=criterion,
-        device=device,
+    pd.DataFrame([metrics]).to_csv(
+        reports_dir / "cnn_subject_split_binary_metrics.csv",
+        index=False,
     )
 
-    print("\nTest metrics:")
-    print(json.dumps(test_metrics, indent=2))
+    (reports_dir / "cnn_subject_split_binary_metrics.json").write_text(
+        json.dumps(metrics, indent=2),
+        encoding="utf-8",
+    )
 
-    print("\nClassification report:")
-    print(classification_report(y_true, y_pred))
-
-    print("\nConfusion matrix:")
-    print(confusion_matrix(y_true, y_pred))
-
-    history_df = pd.DataFrame(history)
-    history_df.to_csv("reports/cnn_subject_split_history.csv", index=False)
-
-    test_results_df = pd.DataFrame({
-        "y_true": y_true,
-        "y_pred": y_pred,
-        "y_proba": y_proba,
-    })
-
-    test_results_df.to_csv("reports/cnn_subject_split_test_predictions.csv", index=False)
-
-    test_metrics_df = pd.DataFrame([test_metrics])
-    test_metrics_df.to_csv("reports/cnn_subject_split_test_metrics.csv", index=False)
-
-    plot_training_history(history, output_dir)
-    plot_confusion_matrix(y_true, y_pred, output_dir)
-
-    print("\nSaved:")
-    print("- models/eeg_cnn_subject_split_binary.pt")
-    print("- reports/cnn_subject_split_history.csv")
-    print("- reports/cnn_subject_split_test_predictions.csv")
-    print("- reports/cnn_subject_split_test_metrics.csv")
-    print("- reports/figures/cnn_subject_split_training_loss.png")
-    print("- reports/figures/cnn_subject_split_validation_metrics.png")
-    print("- reports/figures/cnn_subject_split_confusion_matrix.png")
+    print("CNN metrics:")
+    print(json.dumps(metrics, indent=2))
 
 
 if __name__ == "__main__":

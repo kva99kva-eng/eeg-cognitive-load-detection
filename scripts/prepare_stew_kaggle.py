@@ -3,53 +3,42 @@ import sys
 
 import numpy as np
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.load_stew_kaggle import load_stew_kaggle_windows
 
 
-def save_dataset(binary):
-    output_dir = Path("data/processed")
+def main() -> None:
+    output_dir = PROJECT_ROOT / "data" / "processed"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    X, y, groups = load_stew_kaggle_windows(
-        window_size=256,
-        step=64,
-        binary=binary,
-    )
-
-    if binary:
-        output_path = output_dir / "stew_kaggle_windows_binary.npz"
-    else:
-        output_path = output_dir / "stew_kaggle_windows_3class.npz"
+    print("Preparing 3-class EEG windows...")
+    X, y, groups = load_stew_kaggle_windows(binary=False)
 
     np.savez_compressed(
-        output_path,
+        output_dir / "stew_kaggle_windows_3class.npz",
         X=X,
         y=y,
         groups=groups,
     )
 
-    print("\nSaved:", output_path)
-    print("X:", X.shape)
-    print("y:", y.shape)
-    print("groups:", groups.shape)
-    print("classes:", np.unique(y, return_counts=True))
-    print("subjects:", len(np.unique(groups)))
+    print("Preparing binary EEG windows...")
+    X_binary, y_binary, groups_binary = load_stew_kaggle_windows(binary=True)
 
+    np.savez_compressed(
+        output_dir / "stew_kaggle_windows_binary.npz",
+        X=X_binary,
+        y=y_binary,
+        groups=groups_binary,
+    )
 
-def main():
-    print("=" * 80)
-    print("Saving 3-class dataset")
-    print("=" * 80)
-    save_dataset(binary=False)
-
-    print("\n" + "=" * 80)
-    print("Saving binary dataset")
-    print("=" * 80)
-    save_dataset(binary=True)
+    print("Saved files:")
+    print("- data/processed/stew_kaggle_windows_3class.npz")
+    print("- data/processed/stew_kaggle_windows_binary.npz")
+    print("Binary X:", X_binary.shape)
+    print("Binary y:", y_binary.shape)
+    print("Binary groups:", groups_binary.shape)
 
 
 if __name__ == "__main__":

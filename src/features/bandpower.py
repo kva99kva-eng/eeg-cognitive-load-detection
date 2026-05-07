@@ -10,19 +10,21 @@ FREQ_BANDS = {
 }
 
 
-def extract_bandpower_features(window, sfreq=128):
+def extract_bandpower_features(window: np.ndarray, sfreq: int = 128) -> np.ndarray:
     """
     Extract bandpower features from one EEG window.
 
     Parameters
     ----------
-    window : np.ndarray
-        Shape: (n_channels, n_times)
+    window:
+        EEG window with shape (n_channels, n_times).
+    sfreq:
+        Sampling frequency.
 
     Returns
     -------
-    features : np.ndarray
-        Shape: (n_channels * n_bands,)
+    np.ndarray
+        Feature vector with shape (n_channels * n_bands,).
     """
     features = []
 
@@ -30,7 +32,7 @@ def extract_bandpower_features(window, sfreq=128):
         freqs, psd = welch(
             channel_signal,
             fs=sfreq,
-            nperseg=min(256, len(channel_signal))
+            nperseg=min(256, len(channel_signal)),
         )
 
         for low, high in FREQ_BANDS.values():
@@ -46,19 +48,21 @@ def extract_bandpower_features(window, sfreq=128):
     return np.array(features, dtype=np.float32)
 
 
-def build_feature_matrix(X, sfreq=128):
+def build_feature_matrix(X: np.ndarray, sfreq: int = 128) -> np.ndarray:
     """
-    Convert EEG windows into bandpower feature matrix.
+    Convert EEG windows into a bandpower feature matrix.
 
     Parameters
     ----------
-    X : np.ndarray
-        Shape: (n_samples, n_channels, n_times)
+    X:
+        EEG windows with shape (n_samples, n_channels, n_times).
+    sfreq:
+        Sampling frequency.
 
     Returns
     -------
-    X_features : np.ndarray
-        Shape: (n_samples, n_features)
+    np.ndarray
+        Feature matrix with shape (n_samples, n_features).
     """
     return np.vstack([
         extract_bandpower_features(window, sfreq=sfreq)

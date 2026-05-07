@@ -1,242 +1,122 @@
 from pathlib import Path
-import sys
 import json
+import sys
 
+import joblib
 import numpy as np
 import pandas as pd
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
+    classification_report,
     f1_score,
     roc_auc_score,
-    confusion_matrix,
-    classification_report,
 )
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-
-try:
-    from sklearn.model_selection import StratifiedGroupKFold
-except ImportError:
-    StratifiedGroupKFold = None
-    from sklearn.model_selection import GroupKFold
-
+from sklearn.model_selection import GroupKFold, cross_val_predict
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.features.bandpower import build_feature_matrix
 
 
-RANDOM_STATE = 42
+def load_binary_windows() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    data_path = PROJECT_ROOT / "data" / "processed" / "stew_kaggle_windows_binary.npz"
+
+    if not data_path.exists():
+        raise FileNotFoundError(
+            "Missing data/processed/stew_kaggle_windows_binary.npz. "
+            "Run scripts/prepare_stew_kaggle.py first."
+        )
+
+    data = np.load(data_path)
+    return data["X"], data["y"], data["groups"]
 
 
-def load_or_build_features():
-    features_path = Path("data/processed/stew_kaggle_bandpower_binary.npz")
+def main() -> None:
+    reports_dir = PROJECT_ROOT / "reports"
+    models_dir = PROJECT_ROOT / "models"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
 
-    if features_path.exists():
-        print("Loading cached Kaggle binary bandpower features...")
-        data = np.load(features_path)
-        return data["X_features"], data["y"], data["groups"]
+    X_windows, y, groups = load_binary_windows()
+    print("Loaded windows:", X_windows.shape)
 
-    print("Cached features not found. Building features...")
+    X_features = build_feature_matrix(X_windows, sfreq=128)
+    print("Feature matrix:", X_features.shape)
 
-    data = np.load("data/processed/stew_kaggle_windows_binary.npz")
-
-    X = data["X"]
-    y = data["y"]
-    groups = data["groups"]
-
-    print("Raw windows:", X.shape)
-    print("Labels:", y.shape)
-    print("Groups:", groups.shape)
-
-    X_features = build_feature_matrix(X, sfreq=128)
-
-    np.savez_compressed(
-        features_path,
-        X_features=X_features,
-        y=y,
-        groups=groups,
+    model = Pipeline(
+        steps=[
+            ("scaler", StandardScaler()),
+            (
+                "classifier",
+                RandomForestClassifier(
+                    n_estimators=300,
+                    max_depth=10,
+                    min_samples_leaf=5,
+                    class_weight="balanced",
+                    random_state=42,
+                    n_jobs=-1,
+                ),
+            ),
+        ]
     )
 
-    print("Saved features:", features_path)
+    cv = GroupKFold(n_splits=min(5, len(np.unique(groups))))
 
-    return X_features, y, groups
+    y_pred = cross_val_predict(
+        model,
+        X_features,
+        y,
+        cv=cv,
+        groups=groups,
+        method="predict",
+    )
 
+    y_prob = cross_val_predict(
+        model,
+        X_features,
+        y,
+        cv=cv,
+        groups=groups,
+        method="predict_proba",
+    )[:, 1]
 
-def get_models():
-    return {
-        "LogisticRegression": Pipeline([
-            ("scaler", StandardScaler()),
-            ("model", LogisticRegression(
-                max_iter=2000,
-                class_weight="balanced",
-                random_state=RANDOM_STATE,
-            )),
-        ]),
-
-        "RandomForest": RandomForestClassifier(
-            n_estimators=300,
-            min_samples_leaf=2,
-            class_weight="balanced",
-            random_state=RANDOM_STATE,
-            n_jobs=-1,
-        ),
+    metrics = {
+        "validation": "subject_independent_group_kfold",
+        "accuracy": float(accuracy_score(y, y_pred)),
+        "balanced_accuracy": float(balanced_accuracy_score(y, y_pred)),
+        "macro_f1": float(f1_score(y, y_pred, average="macro")),
+        "weighted_f1": float(f1_score(y, y_pred, average="weighted")),
+        "roc_auc": float(roc_auc_score(y, y_prob)),
     }
 
-
-def make_cv(n_splits=5):
-    if StratifiedGroupKFold is not None:
-        return StratifiedGroupKFold(
-            n_splits=n_splits,
-            shuffle=True,
-            random_state=RANDOM_STATE,
-        )
-
-    print("WARNING: StratifiedGroupKFold unavailable. Falling back to GroupKFold.")
-    return GroupKFold(n_splits=n_splits)
-
-
-def evaluate_model(model_name, model, X_features, y, groups, n_splits=5):
-    cv = make_cv(n_splits=n_splits)
-
-    fold_results = []
-
-    all_y_true = []
-    all_y_pred = []
-    all_y_proba = []
-
-    for fold, (train_idx, test_idx) in enumerate(cv.split(X_features, y, groups)):
-        X_train = X_features[train_idx]
-        X_test = X_features[test_idx]
-
-        y_train = y[train_idx]
-        y_test = y[test_idx]
-
-        train_groups = np.unique(groups[train_idx])
-        test_groups = np.unique(groups[test_idx])
-
-        print("\n" + "-" * 80)
-        print(f"{model_name} | Fold {fold}")
-        print("Train subjects:", train_groups)
-        print("Test subjects:", test_groups)
-        print("Train class distribution:", np.unique(y_train, return_counts=True))
-        print("Test class distribution:", np.unique(y_test, return_counts=True))
-
-        model.fit(X_train, y_train)
-
-        y_pred = model.predict(X_test)
-
-        if hasattr(model, "predict_proba"):
-            y_proba = model.predict_proba(X_test)[:, 1]
-        else:
-            y_proba = y_pred
-
-        result = {
-            "model": model_name,
-            "fold": fold,
-            "n_train_subjects": len(train_groups),
-            "n_test_subjects": len(test_groups),
-            "accuracy": accuracy_score(y_test, y_pred),
-            "balanced_accuracy": balanced_accuracy_score(y_test, y_pred),
-            "macro_f1": f1_score(y_test, y_pred, average="macro"),
-            "weighted_f1": f1_score(y_test, y_pred, average="weighted"),
-            "roc_auc": roc_auc_score(y_test, y_proba),
-        }
-
-        print(json.dumps(result, indent=2))
-
-        fold_results.append(result)
-
-        all_y_true.extend(y_test.tolist())
-        all_y_pred.extend(y_pred.tolist())
-        all_y_proba.extend(y_proba.tolist())
-
-    all_y_true = np.array(all_y_true)
-    all_y_pred = np.array(all_y_pred)
-    all_y_proba = np.array(all_y_proba)
-
-    print("\n" + "=" * 80)
-    print(f"Classification report for {model_name}")
-    print("=" * 80)
-    print(classification_report(all_y_true, all_y_pred))
-
-    print("Confusion matrix:")
-    print(confusion_matrix(all_y_true, all_y_pred))
-
-    print("Overall ROC-AUC:", roc_auc_score(all_y_true, all_y_proba))
-
-    return fold_results
-
-
-def main():
-    reports_dir = Path("reports")
-    reports_dir.mkdir(parents=True, exist_ok=True)
-
-    X_features, y, groups = load_or_build_features()
-
-    print("\nLoaded feature dataset")
-    print("X_features:", X_features.shape)
-    print("y:", y.shape)
-    print("groups:", groups.shape)
-    print("Classes:", np.unique(y, return_counts=True))
-    print("Subjects:", len(np.unique(groups)))
-
-    all_results = []
-
-    for model_name, model in get_models().items():
-        print("\n" + "=" * 80)
-        print("Training subject-independent model:", model_name)
-        print("=" * 80)
-
-        results = evaluate_model(
-            model_name=model_name,
-            model=model,
-            X_features=X_features,
-            y=y,
-            groups=groups,
-            n_splits=5,
-        )
-
-        all_results.extend(results)
-
-    results_df = pd.DataFrame(all_results)
-
-    results_path = reports_dir / "group_binary_cv_results.csv"
-    summary_path = reports_dir / "group_binary_summary.csv"
-
-    results_df.to_csv(results_path, index=False)
-
-    metrics = [
-        "accuracy",
-        "balanced_accuracy",
-        "macro_f1",
-        "weighted_f1",
-        "roc_auc",
-    ]
-
-    summary = (
-        results_df
-        .groupby("model")[metrics]
-        .agg(["mean", "std"])
+    report = classification_report(
+        y,
+        y_pred,
+        target_names=["low_load", "high_load"],
+        output_dict=True,
+        zero_division=0,
     )
 
-    summary.to_csv(summary_path)
+    model.fit(X_features, y)
+    joblib.dump(model, models_dir / "random_forest_subject_independent.joblib")
 
-    print("\nFinal subject-independent CV results:")
-    print(results_df)
+    pd.DataFrame([metrics]).to_csv(
+        reports_dir / "group_baseline_binary_metrics.csv",
+        index=False,
+    )
 
-    print("\nSummary:")
-    print(summary)
+    (reports_dir / "group_baseline_binary_report.json").write_text(
+        json.dumps(report, indent=2),
+        encoding="utf-8",
+    )
 
-    print("\nSaved:")
-    print("-", results_path)
-    print("-", summary_path)
+    print("Subject-independent baseline metrics:")
+    print(json.dumps(metrics, indent=2))
 
 
 if __name__ == "__main__":

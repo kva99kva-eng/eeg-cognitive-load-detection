@@ -1,55 +1,42 @@
 from pathlib import Path
+import sys
 
 import numpy as np
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-def main():
-    input_path = Path("data/processed/stew_kaggle_windows_binary.npz")
-    output_path = Path("app/demo_samples.npz")
 
-    if not input_path.exists():
+def main() -> None:
+    data_path = PROJECT_ROOT / "data" / "processed" / "stew_kaggle_windows_binary.npz"
+    output_path = PROJECT_ROOT / "app" / "demo_samples.npz"
+
+    if not data_path.exists():
         raise FileNotFoundError(
-            "data/processed/stew_kaggle_windows_binary.npz not found. "
+            "Missing data/processed/stew_kaggle_windows_binary.npz. "
             "Run scripts/prepare_stew_kaggle.py first."
         )
 
-    data = np.load(input_path)
-
+    data = np.load(data_path)
     X = data["X"]
     y = data["y"]
     groups = data["groups"]
 
     rng = np.random.default_rng(42)
-
-    idx_class_0 = np.where(y == 0)[0]
-    idx_class_1 = np.where(y == 1)[0]
-
-    selected_0 = rng.choice(idx_class_0, size=50, replace=False)
-    selected_1 = rng.choice(idx_class_1, size=50, replace=False)
-
-    selected_idx = np.concatenate([selected_0, selected_1])
-    rng.shuffle(selected_idx)
-
-    X_demo = X[selected_idx]
-    y_demo = y[selected_idx]
-    groups_demo = groups[selected_idx]
+    sample_size = min(250, len(X))
+    indices = rng.choice(len(X), size=sample_size, replace=False)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     np.savez_compressed(
         output_path,
-        X=X_demo,
-        y=y_demo,
-        groups=groups_demo,
-        source_indices=selected_idx,
+        X=X[indices],
+        y=y[indices],
+        groups=groups[indices],
+        source_indices=indices,
     )
 
-    print("Saved:", output_path)
-    print("X:", X_demo.shape)
-    print("y:", y_demo.shape)
-    print("groups:", groups_demo.shape)
-    print("classes:", np.unique(y_demo, return_counts=True))
-    print("subjects:", len(np.unique(groups_demo)))
+    print(f"Saved demo samples to: {output_path.relative_to(PROJECT_ROOT)}")
+    print(f"Samples: {sample_size}")
 
 
 if __name__ == "__main__":

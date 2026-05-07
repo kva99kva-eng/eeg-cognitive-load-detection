@@ -4,11 +4,10 @@ scipy
 scikit-learn
 matplotlib
 seaborn
-jupyter
+jupyterlab
 datasets==3.6.0
 mne
 torch
 tqdm
 joblib
 streamlit
-

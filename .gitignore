@@ -11,10 +11,18 @@ env/
 
 # Jupyter
 .ipynb_checkpoints/
+*/.ipynb_checkpoints/
 
 # Data
 data/raw/
-data/processed/
+data/processed/*.npz
+data/processed/*.npy
+
+# Model artifacts
+models/*.pt
+models/*.pth
+models/*.joblib
+models/*.pkl
 
 # OS
 .DS_Store
@@ -26,4 +34,3 @@ Thumbs.db
 
 # Logs
 *.log
-

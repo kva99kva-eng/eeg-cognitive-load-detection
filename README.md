@@ -8,8 +8,8 @@ This project is designed as a portfolio-ready neurotechnology / BCI case study. 
 
 The goal is to classify EEG windows into two cognitive load states:
 
-- `0` - low cognitive load
-- `1` - high cognitive load
+- `0` — low cognitive load
+- `1` — high cognitive load
 
 The project compares two approaches:
 
@@ -22,8 +22,8 @@ EEG classification can easily produce misleadingly high scores when windows from
 
 This project explicitly compares:
 
-- window-level cross-validation - optimistic validation that may contain subject leakage;
-- subject-independent validation - more realistic validation where test subjects are unseen during training.
+- window-level cross-validation — optimistic validation that may contain subject leakage;
+- subject-independent validation — more realistic validation where test subjects are unseen during training.
 
 The main finding is that window-level validation strongly overestimates performance.
 
@@ -40,23 +40,27 @@ Characteristics:
 - 28,512 EEG windows
 - 14 EEG channels
 - 256 time points per window
-- Sampling rate: 128 Hz
-- Binary labels: low / high cognitive load
-- Balanced classes
+- sampling rate: 128 Hz
+- binary labels: low / high cognitive load
+- balanced classes
 
 Input tensor shape:
 
-- `X.shape == (28512, 14, 256)`
-- `y.shape == (28512,)`
+```text
+X.shape == (28512, 14, 256)
+y.shape == (28512,)
+```
 
-### Kaggle STEW MAT dataset
+### Kaggle STEW MAT Dataset
 
 Used for subject-independent validation.
 
 Raw shape:
 
-- `dataset.mat: (14, 19200, 45)`
-- `class_012.mat: (45, 1)`
+```text
+dataset.mat: (14, 19200, 45)
+class_012.mat: (45, 1)
+```
 
 This means:
 
@@ -85,26 +89,26 @@ The signals were split into EEG windows:
 
 ## Project Structure
 
-- `app/streamlit_app.py` - Streamlit demo application.
-- `app/demo_samples.npz` - prepared demo samples for inference.
-- `models/eeg_cnn_subject_split_binary.pt` - trained CNN model.
-- `reports/` - metrics, comparisons, and result summaries.
-- `reports/figures/` - visual results used in README and reports.
-- `scripts/` - data preparation, training, evaluation, and comparison scripts.
-- `src/data/` - dataset loading utilities.
-- `src/features/` - EEG feature extraction utilities.
-- `src/models/` - CNN architecture.
-- `requirements.txt` - Python dependencies.
+- `app/streamlit_app.py` — Streamlit demo application.
+- `app/demo_samples.npz` — prepared demo samples for inference.
+- `models/eeg_cnn_subject_split_binary.pt` — trained CNN model.
+- `reports/` — metrics, comparisons, and result summaries.
+- `reports/figures/` — visual results used in README and reports.
+- `scripts/` — data preparation, training, evaluation, and comparison scripts.
+- `src/data/` — dataset loading utilities.
+- `src/features/` — EEG feature extraction utilities.
+- `src/models/` — CNN architecture.
+- `requirements.txt` — Python dependencies.
 
 ## Key Results
 
-### Validation strategy comparison
+### Validation Strategy Comparison
 
 Window-level validation produced much stronger metrics than subject-independent validation, confirming that EEG window-level splits can overestimate real-world performance.
 
 Subject-independent validation is more realistic because the model is evaluated on unseen subjects.
 
-### Classical ML baseline
+### Classical ML Baseline
 
 Classical ML models were trained using spectral bandpower features.
 
@@ -117,7 +121,7 @@ The analysis includes:
 - feature importance;
 - band-level and channel-level interpretation.
 
-### CNN model
+### CNN Model
 
 A CNN was trained on raw EEG windows using a subject-independent split.
 
@@ -125,19 +129,19 @@ The CNN result should be interpreted as an exploratory baseline rather than a pr
 
 ## Key Visual Results
 
-### Validation strategy comparison
+### Validation Strategy Comparison
 
 ![Validation strategy comparison](reports/figures/validation_comparison_balanced_accuracy.png)
 
-### ML vs CNN comparison
+### ML vs CNN Comparison
 
 ![ML vs CNN balanced accuracy](reports/figures/ml_vs_cnn_balanced_accuracy.png)
 
-### EEG band importance
+### EEG Band Importance
 
 ![Band importance](reports/figures/band_importance.png)
 
-### Channel-band importance heatmap
+### Channel-Band Importance Heatmap
 
 ![Channel-band importance heatmap](reports/figures/channel_band_importance_heatmap.png)
 
@@ -147,51 +151,85 @@ The project includes a Streamlit demo for model inference on prepared EEG sample
 
 Run demo:
 
-`streamlit run app/streamlit_app.py`
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Demo files:
+
+- `app/streamlit_app.py`
+- `app/demo_samples.npz`
+- `models/eeg_cnn_subject_split_binary.pt`
 
 ## Installation
 
-Create and activate a virtual environment:
+Create and activate virtual environment:
 
-`python -m venv .venv`
+```bash
+python -m venv .venv
+```
 
 Windows PowerShell:
 
-`.\.venv\Scripts\Activate.ps1`
+```bash
+.\.venv\Scripts\Activate.ps1
+```
 
 Install dependencies:
 
-`pip install -r requirements.txt`
+```bash
+pip install -r requirements.txt
+```
 
 ## Reproduce Results
 
 Prepare Kaggle STEW windows:
 
-`python scripts/prepare_stew_kaggle.py`
+```bash
+python scripts/prepare_stew_kaggle.py
+```
 
 Train subject-independent ML baselines:
 
-`python scripts/train_group_baseline_binary.py`
+```bash
+python scripts/train_group_baseline_binary.py
+```
 
 Train window-level baselines:
 
-`python scripts/train_kaggle_window_baseline_binary.py`
+```bash
+python scripts/train_kaggle_window_baseline_binary.py
+```
 
 Compare validation strategies:
 
-`python scripts/compare_validation_strategies.py`
+```bash
+python scripts/compare_validation_strategies.py
+```
 
 Train CNN:
 
-`python scripts/train_cnn_subject_split_binary.py`
+```bash
+python scripts/train_cnn_subject_split_binary.py
+```
 
 Tune CNN threshold:
 
-`python scripts/tune_cnn_threshold.py`
+```bash
+python scripts/tune_cnn_threshold.py
+```
 
 Compare ML and CNN:
 
-`python scripts/compare_ml_and_cnn.py`
+```bash
+python scripts/compare_ml_and_cnn.py
+```
+
+Run demo:
+
+```bash
+streamlit run app/streamlit_app.py
+```
 
 ## Limitations
 
@@ -229,4 +267,3 @@ Built an EEG cognitive load detection pipeline using spectral bandpower features
 ## License
 
 This project is licensed under the MIT License.
-

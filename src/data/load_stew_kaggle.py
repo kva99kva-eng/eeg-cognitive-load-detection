@@ -7,7 +7,8 @@ from scipy.io import loadmat
 RAW_DIR = Path("data/raw/stew")
 
 
-def _load_first_variable(mat_path):
+def _load_first_variable(mat_path: Path) -> np.ndarray:
+    """Load the only non-private variable from a MATLAB file."""
     mat = loadmat(mat_path)
     keys = [key for key in mat.keys() if not key.startswith("__")]
 
@@ -17,16 +18,30 @@ def _load_first_variable(mat_path):
     return mat[keys[0]]
 
 
-def create_windows(signal, window_size=256, step=64):
+def create_windows(
+    signal: np.ndarray,
+    window_size: int = 256,
+    step: int = 64,
+) -> np.ndarray:
     """
-    signal shape: (n_channels, n_times)
+    Split one subject signal into overlapping EEG windows.
 
-    returns:
-        windows shape: (n_windows, n_channels, window_size)
+    Parameters
+    ----------
+    signal:
+        Array with shape (n_channels, n_times).
+    window_size:
+        Window length in samples.
+    step:
+        Step size in samples.
+
+    Returns
+    -------
+    np.ndarray
+        Windows with shape (n_windows, n_channels, window_size).
     """
     windows = []
-
-    n_channels, n_times = signal.shape
+    _, n_times = signal.shape
 
     for start in range(0, n_times - window_size + 1, step):
         end = start + window_size
@@ -37,32 +52,30 @@ def create_windows(signal, window_size=256, step=64):
 
 
 def load_stew_kaggle_windows(
-    window_size=256,
-    step=64,
-    binary=False,
-):
+    window_size: int = 256,
+    step: int = 64,
+    binary: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Loads Kaggle STEW .mat files and creates EEG windows.
+    Load Kaggle STEW .mat files and create EEG windows.
 
-    dataset.mat shape: (14, 19200, 45)
-    class_012.mat shape: (45, 1)
+    `dataset.mat` is expected to have shape (14, 19200, 45).
+    `class_012.mat` is expected to have shape (45, 1).
 
     Parameters
     ----------
     binary:
-        If False: use 3 classes: 0, 1, 2
-        If True: drop class 1 and map:
-            0 -> 0
-            2 -> 1
+        If False, use 3 classes: 0, 1, 2.
+        If True, drop class 1 and map 0 -> 0, 2 -> 1.
 
     Returns
     -------
     X:
-        shape (n_windows_total, 14, window_size)
+        EEG windows with shape (n_windows_total, 14, window_size).
     y:
-        shape (n_windows_total,)
+        Labels with shape (n_windows_total,).
     groups:
-        shape (n_windows_total,), subject id for GroupKFold
+        Subject IDs for GroupKFold with shape (n_windows_total,).
     """
     dataset_path = RAW_DIR / "dataset.mat"
     labels_path = RAW_DIR / "class_012.mat"
@@ -104,7 +117,6 @@ def load_stew_kaggle_windows(
             label = 0 if label == 0 else 1
 
         signal = data[:, :, subject_idx]
-
         windows = create_windows(
             signal,
             window_size=window_size,
