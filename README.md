@@ -1,8 +1,24 @@
 # EEG Cognitive Load Detection
 
-EEG cognitive load detection project with classical machine learning baselines, subject-independent validation, CNN modeling, and a Streamlit demo.
+EEG cognitive load detection project with classical machine learning baselines, subject-independent validation, CNN modeling, leakage analysis and a Streamlit demo.
 
-This project is designed as a portfolio-ready neurotechnology / BCI case study. It demonstrates EEG preprocessing, spectral feature extraction, validation leakage analysis, model comparison, feature importance, and interactive model demonstration.
+This project is designed as a portfolio-ready neurotechnology / BCI case study. It focuses not only on model training, but also on validation strategy, leakage risk, feature interpretation and honest limitations.
+
+## Executive Summary
+
+This project demonstrates an end-to-end EEG cognitive load classification workflow.
+
+The strongest part of the project is the validation design: I explicitly compare optimistic window-level validation with subject-independent validation, where test subjects are unseen during training.
+
+Main contribution:
+
+- built EEG windowing and spectral bandpower feature extraction;
+- trained classical ML baselines on bandpower features;
+- trained a CNN baseline on raw EEG windows;
+- compared window-level and subject-independent validation;
+- showed that window-level validation can strongly overestimate model performance;
+- built a Streamlit demo for model inference;
+- documented model limitations and next steps.
 
 ## Project Goal
 
@@ -22,10 +38,10 @@ EEG classification can easily produce misleadingly high scores when windows from
 
 This project explicitly compares:
 
-- window-level cross-validation — optimistic validation that may contain subject leakage;
-- subject-independent validation — more realistic validation where test subjects are unseen during training.
+- **window-level cross-validation** — optimistic validation where windows from the same subject can appear in both train and test folds;
+- **subject-independent validation** — more realistic validation where test subjects are unseen during training.
 
-The main finding is that window-level validation strongly overestimates performance.
+The main finding is that window-level validation strongly overestimates performance. This suggests that part of the optimistic performance is driven by subject-specific EEG patterns rather than fully generalizable cognitive load markers.
 
 ## Datasets
 
@@ -75,81 +91,153 @@ The signals were split into EEG windows:
 - window size: 256 samples, 2 seconds
 - step size: 64 samples, 0.5 seconds
 
-## Methods
+Binary version:
 
-- EEG windowing
-- Spectral bandpower feature extraction
-- Classical ML baselines
-- Subject-independent validation
-- Validation leakage analysis
-- Feature importance analysis
-- CNN modeling on raw EEG windows
-- Threshold tuning
-- Streamlit demo application
+```text
+X: (8019, 14, 256)
+classes: 0 / 1
+subjects: 27
+```
 
-## Project Structure
+## EEG Channels
 
-- `app/streamlit_app.py` — Streamlit demo application.
-- `app/demo_samples.npz` — prepared demo samples for inference.
-- `models/eeg_cnn_subject_split_binary.pt` — trained CNN model.
-- `reports/` — metrics, comparisons, and result summaries.
-- `reports/figures/` — visual results used in README and reports.
-- `scripts/` — data preparation, training, evaluation, and comparison scripts.
-- `src/data/` — dataset loading utilities.
-- `src/features/` — EEG feature extraction utilities.
-- `src/models/` — CNN architecture.
-- `requirements.txt` — Python dependencies.
+The dataset contains 14 EEG channels:
 
-## Key Results
+```text
+AF3, F7, F3, FC5, T7, P7, O1,
+O2, P8, T8, FC6, F4, F8, AF4
+```
 
-### Validation Strategy Comparison
+## Methodology
 
-Window-level validation produced much stronger metrics than subject-independent validation, confirming that EEG window-level splits can overestimate real-world performance.
+The project pipeline includes:
 
-Subject-independent validation is more realistic because the model is evaluated on unseen subjects.
+1. EEG dataset loading
+2. EEG windowing
+3. Exploratory EEG visualization
+4. Power spectral density analysis
+5. Bandpower feature extraction
+6. Classical ML baseline training
+7. Window-level cross-validation
+8. Subject-independent validation
+9. Feature importance analysis
+10. CNN training on raw EEG windows
+11. Threshold tuning
+12. Streamlit demo
 
-### Classical ML Baseline
+## Feature Extraction
 
-Classical ML models were trained using spectral bandpower features.
+Spectral bandpower features were extracted for each EEG channel.
 
-The analysis includes:
+| Band | Frequency range |
+|---|---:|
+| Theta | 4–8 Hz |
+| Alpha | 8–13 Hz |
+| Beta | 13–30 Hz |
+| Gamma | 30–45 Hz |
 
-- accuracy;
-- balanced accuracy;
-- macro F1;
-- ROC AUC;
-- feature importance;
-- band-level and channel-level interpretation.
+For each EEG window:
 
-### CNN Model
+```text
+14 channels x 4 frequency bands = 56 features
+```
 
-A CNN was trained on raw EEG windows using a subject-independent split.
+## Classical ML Models
 
-The CNN result should be interpreted as an exploratory baseline rather than a production-grade model. The dataset is relatively small for deep learning, and the model requires better calibration and regularization.
+Two classical ML baselines were evaluated:
 
-## Key Visual Results
+- Logistic Regression
+- Random Forest
 
-### Validation Strategy Comparison
+Metrics:
 
-![Validation strategy comparison](reports/figures/validation_comparison_balanced_accuracy.png)
+- Accuracy
+- Balanced accuracy
+- Macro F1
+- Weighted F1
+- ROC AUC
 
-### ML vs CNN Comparison
+## Window-Level vs Subject-Independent Validation
+
+A key part of this project is comparing two validation strategies on the same Kaggle STEW binary dataset.
+
+| Strategy | Description |
+|---|---|
+| Window-level CV | Random stratified split of EEG windows. The same subjects can appear in both train and test folds. |
+| Subject-independent CV | Grouped split by subject. Test subjects are unseen during training. |
+
+### Results
+
+| Validation | Model | Accuracy | Balanced accuracy | Macro F1 | ROC AUC |
+|---|---|---:|---:|---:|---:|
+| Window-level CV | Logistic Regression | 0.705 ± 0.018 | 0.695 ± 0.019 | 0.678 ± 0.024 | 0.812 ± 0.017 |
+| Window-level CV | Random Forest | 0.949 ± 0.003 | 0.948 ± 0.003 | 0.949 ± 0.003 | 0.990 ± 0.001 |
+| Subject-independent CV | Logistic Regression | 0.616 ± 0.041 | 0.585 ± 0.080 | 0.550 ± 0.112 | 0.597 ± 0.106 |
+| Subject-independent CV | Random Forest | 0.594 ± 0.077 | 0.580 ± 0.099 | 0.567 ± 0.110 | 0.628 ± 0.142 |
+
+Window-level cross-validation gives much higher performance, especially for Random Forest. However, this setup allows subject overlap between train and test folds.
+
+Subject-independent validation is substantially harder and gives lower, more realistic performance.
+
+![Validation comparison](reports/figures/validation_comparison_balanced_accuracy.png)
+
+## Classical ML vs CNN
+
+A simple CNN was trained directly on raw EEG windows.
+
+| Model | Input | Validation | Accuracy | Balanced accuracy | Macro F1 | ROC AUC |
+|---|---|---|---:|---:|---:|---:|
+| Logistic Regression | Bandpower features | Subject-independent 5-fold CV | 0.616 ± 0.041 | 0.585 ± 0.080 | 0.550 ± 0.112 | 0.597 ± 0.106 |
+| Random Forest | Bandpower features | Subject-independent 5-fold CV | 0.594 ± 0.077 | 0.580 ± 0.099 | 0.567 ± 0.110 | 0.628 ± 0.142 |
+| Simple CNN | Raw EEG windows | Subject-independent single split, threshold=0.5 | 0.626 | 0.548 | 0.501 | 0.742 |
+| Simple CNN tuned threshold | Raw EEG windows | Subject-independent single split, threshold=0.35 | 0.622 | 0.537 | 0.472 | 0.742 |
+
+The CNN achieved the best ROC AUC on the selected subject-independent split, but its balanced accuracy and macro F1 remained limited due to bias toward the high-load class.
+
+Threshold tuning did not improve test-set balanced accuracy, so the default threshold result is kept as the main CNN baseline.
 
 ![ML vs CNN balanced accuracy](reports/figures/ml_vs_cnn_balanced_accuracy.png)
 
-### EEG Band Importance
+## Feature Importance
+
+Random Forest feature importance was used to estimate which EEG spectral features contributed most to the classification.
+
+Top features included:
+
+| Feature | Importance |
+|---|---:|
+| F8_theta | 0.07363 |
+| FC6_theta | 0.04138 |
+| F8_gamma | 0.03234 |
+| F8_beta | 0.03210 |
+| O2_theta | 0.03021 |
+| T8_theta | 0.02829 |
+| O1_theta | 0.02513 |
+| F7_gamma | 0.02449 |
+| O2_alpha | 0.02431 |
+| F8_alpha | 0.02319 |
+
+The most important features were mainly located in frontal and temporal channels, especially in the theta band.
+
+This analysis should be interpreted as model-level feature importance, not as a causal neuroscientific conclusion.
 
 ![Band importance](reports/figures/band_importance.png)
 
-### Channel-Band Importance Heatmap
-
-![Channel-band importance heatmap](reports/figures/channel_band_importance_heatmap.png)
+![Channel-band importance](reports/figures/channel_band_importance_heatmap.png)
 
 ## Streamlit Demo
 
-The project includes a Streamlit demo for model inference on prepared EEG samples.
+The project includes an interactive Streamlit demo for EEG cognitive load prediction.
 
-Run demo:
+The demo allows the user to:
+
+- select an EEG window;
+- visualize the 14-channel EEG signal;
+- inspect CNN predicted probabilities;
+- adjust the decision threshold;
+- compare predicted and true cognitive load labels.
+
+Run locally:
 
 ```bash
 streamlit run app/streamlit_app.py
@@ -161,9 +249,33 @@ Demo files:
 - `app/demo_samples.npz`
 - `models/eeg_cnn_subject_split_binary.pt`
 
+## Project Structure
+
+```text
+eeg-cognitive-load-detection/
+├── app/
+│   ├── demo_samples.npz
+│   └── streamlit_app.py
+├── models/
+│   └── eeg_cnn_subject_split_binary.pt
+├── reports/
+│   ├── figures/
+│   ├── validation_comparison_summary.csv
+│   ├── ml_vs_cnn_summary.csv
+│   └── results.md
+├── scripts/
+├── src/
+│   ├── data/
+│   ├── features/
+│   └── models/
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
+
 ## Installation
 
-Create and activate virtual environment:
+Create and activate a virtual environment:
 
 ```bash
 python -m venv .venv
@@ -231,7 +343,7 @@ Run demo:
 streamlit run app/streamlit_app.py
 ```
 
-## Limitations
+## Current Limitations
 
 - The CNN was evaluated on a single subject-independent split, not full cross-validation.
 - The dataset is relatively small for deep learning.
@@ -239,7 +351,7 @@ streamlit run app/streamlit_app.py
 - The current project focuses on offline classification, not real-time inference.
 - Results are intended for educational and portfolio purposes, not clinical use.
 
-## Future Work
+## Next Steps
 
 - Train CNN with subject-independent cross-validation.
 - Add EEGNet-style architecture.
@@ -252,7 +364,7 @@ streamlit run app/streamlit_app.py
 
 - Python
 - NumPy
-- Pandas
+- pandas
 - SciPy
 - scikit-learn
 - PyTorch
@@ -262,7 +374,7 @@ streamlit run app/streamlit_app.py
 
 ## Resume Summary
 
-Built an EEG cognitive load detection pipeline using spectral bandpower features and raw EEG CNN modeling. Implemented subject-independent validation, leakage analysis, feature importance visualization, threshold tuning, and an interactive Streamlit demo.
+Built an EEG cognitive load detection pipeline using spectral bandpower features and raw EEG CNN modeling. Implemented subject-independent validation, leakage analysis, feature importance visualization, threshold tuning and an interactive Streamlit demo.
 
 ## License
 

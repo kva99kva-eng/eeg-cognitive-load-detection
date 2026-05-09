@@ -25,20 +25,6 @@ def create_windows(
 ) -> np.ndarray:
     """
     Split one subject signal into overlapping EEG windows.
-
-    Parameters
-    ----------
-    signal:
-        Array with shape (n_channels, n_times).
-    window_size:
-        Window length in samples.
-    step:
-        Step size in samples.
-
-    Returns
-    -------
-    np.ndarray
-        Windows with shape (n_windows, n_channels, window_size).
     """
     windows = []
     _, n_times = signal.shape
@@ -61,21 +47,6 @@ def load_stew_kaggle_windows(
 
     `dataset.mat` is expected to have shape (14, 19200, 45).
     `class_012.mat` is expected to have shape (45, 1).
-
-    Parameters
-    ----------
-    binary:
-        If False, use 3 classes: 0, 1, 2.
-        If True, drop class 1 and map 0 -> 0, 2 -> 1.
-
-    Returns
-    -------
-    X:
-        EEG windows with shape (n_windows_total, 14, window_size).
-    y:
-        Labels with shape (n_windows_total,).
-    groups:
-        Subject IDs for GroupKFold with shape (n_windows_total,).
     """
     dataset_path = RAW_DIR / "dataset.mat"
     labels_path = RAW_DIR / "class_012.mat"

@@ -17,7 +17,6 @@ class EEGSimpleCNN(nn.Module):
         super().__init__()
 
         self.features = nn.Sequential(
-            # Input after unsqueeze: (B, 1, 14, 256)
             nn.Conv2d(
                 in_channels=1,
                 out_channels=16,
@@ -26,8 +25,6 @@ class EEGSimpleCNN(nn.Module):
             ),
             nn.BatchNorm2d(16),
             nn.ReLU(),
-
-            # Spatial convolution across EEG channels.
             nn.Conv2d(
                 in_channels=16,
                 out_channels=32,
@@ -37,7 +34,6 @@ class EEGSimpleCNN(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.25),
             nn.AvgPool2d(kernel_size=(1, 4)),
-
             nn.Conv2d(
                 in_channels=32,
                 out_channels=64,
@@ -58,7 +54,7 @@ class EEGSimpleCNN(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Run forward pass."""
-        x = x.unsqueeze(1)  # (B, 1, 14, 256)
+        x = x.unsqueeze(1)
         x = self.features(x)
         x = self.classifier(x)
 
