@@ -1,5 +1,7 @@
 # EEG Cognitive Load Detection
 
+[![Tests](https://github.com/kva99kva-eng/eeg-cognitive-load-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/kva99kva-eng/eeg-cognitive-load-detection/actions/workflows/tests.yml)
+
 EEG cognitive load detection project with classical machine learning baselines, subject-independent validation, CNN modeling, leakage analysis and a Streamlit demo.
 
 This project is designed as a portfolio-ready neurotechnology / BCI case study. It focuses not only on model training, but also on validation strategy, leakage risk, feature interpretation and honest limitations.
@@ -375,6 +377,22 @@ streamlit run app/streamlit_app.py
 ## Resume Summary
 
 Built an EEG cognitive load detection pipeline using spectral bandpower features and raw EEG CNN modeling. Implemented subject-independent validation, leakage analysis, feature importance visualization, threshold tuning and an interactive Streamlit demo.
+
+## Limitations
+
+This project should be interpreted as a neurotechnology portfolio case study, not as a production-ready medical or BCI system.
+
+Main limitations:
+
+- the dataset is relatively small for robust EEG model generalization;
+- EEG windows from the same subject can inflate performance under window-level validation;
+- subject-independent validation is more realistic and should be treated as the primary evaluation setting;
+- model performance may be affected by subject-specific EEG patterns, recording conditions and preprocessing choices;
+- the CNN baseline is included as a methodological comparison, not as a final optimized architecture;
+- the project does not provide clinical, diagnostic or medical conclusions.
+
+The key methodological conclusion is that validation strategy matters more than the highest reported score. Window-level validation can look impressive, but subject-independent validation gives a more honest estimate of generalization to unseen users.
+
 
 ## License
 
