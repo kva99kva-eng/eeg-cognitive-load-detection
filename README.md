@@ -255,25 +255,41 @@ Demo files:
 
 ```text
 eeg-cognitive-load-detection/
-├── app/
-│   ├── demo_samples.npz
-│   └── streamlit_app.py
-├── models/
-│   └── eeg_cnn_subject_split_binary.pt
-├── reports/
-│   ├── figures/
-│   ├── validation_comparison_summary.csv
-│   ├── ml_vs_cnn_summary.csv
-│   └── results.md
-├── scripts/
-├── src/
-│   ├── data/
-│   ├── features/
-│   └── models/
-├── .gitignore
-├── README.md
-└── requirements.txt
+|-- .github/
+|   `-- workflows/
+|       `-- tests.yml
+|-- app/
+|   |-- demo_samples.npz
+|   `-- streamlit_app.py
+|-- models/
+|   `-- eeg_cnn_subject_split_binary.pt
+|-- notebooks/
+|   `-- .gitkeep
+|-- reports/
+|   |-- figures/
+|   |-- validation_comparison_summary.csv
+|   |-- ml_vs_cnn_summary.csv
+|   `-- results.md
+|-- scripts/
+|   |-- compare_validation_strategies.py
+|   |-- train_group_baseline_binary.py
+|   |-- train_kaggle_window_baseline_binary.py
+|   |-- train_cnn_subject_split_binary.py
+|   `-- tune_cnn_threshold.py
+|-- src/
+|   |-- data/
+|   |-- features/
+|   `-- models/
+|-- tests/
+|   |-- test_project_structure.py
+|   |-- test_python_files_compile.py
+|   |-- test_readme_quality.py
+|   `-- test_reports_and_figures.py
+|-- .gitignore
+|-- README.md
+`-- requirements.txt
 ```
+
 
 ## Installation
 
@@ -345,22 +361,49 @@ Run demo:
 streamlit run app/streamlit_app.py
 ```
 
-## Current Limitations
+## Limitations
 
-- The CNN was evaluated on a single subject-independent split, not full cross-validation.
-- The dataset is relatively small for deep learning.
-- The CNN requires better calibration and regularization.
-- The current project focuses on offline classification, not real-time inference.
-- Results are intended for educational and portfolio purposes, not clinical use.
+This project should be interpreted as a neurotechnology portfolio case study, not as a production-ready medical or BCI system.
+
+Main limitations:
+
+- the dataset is relatively small for robust EEG model generalization;
+- EEG windows from the same subject can inflate performance under window-level validation;
+- subject-independent validation is more realistic and should be treated as the primary evaluation setting;
+- model performance may be affected by subject-specific EEG patterns, recording conditions and preprocessing choices;
+- the CNN baseline is included as a methodological comparison, not as a final optimized architecture;
+- the CNN was evaluated on a single subject-independent split, not full cross-validation;
+- the project focuses on offline classification, not real-time inference;
+- the project does not provide clinical, diagnostic or medical conclusions.
+
+The key methodological conclusion is that validation strategy matters more than the highest reported score. Window-level validation can look impressive, but subject-independent validation gives a more honest estimate of generalization to unseen users.
 
 ## Next Steps
 
 - Train CNN with subject-independent cross-validation.
 - Add EEGNet-style architecture.
 - Add probability calibration.
-- Add more robust preprocessing.
-- Improve the Streamlit demo.
-- Add unit tests and CI checks.
+- Add more robust EEG preprocessing.
+- Improve the Streamlit demo with clearer uncertainty display.
+- Add model cards or experiment tracking for future model comparisons.
+
+## Quality and Reproducibility
+
+This repository is structured as a reproducible neurotechnology / EEG analytics case rather than a notebook-only experiment.
+
+| Component | Purpose |
+|---|---|
+| `src/` | Reusable modules for EEG data loading, feature extraction and CNN modeling |
+| `scripts/` | Reproducible experiment scripts for validation, training and comparison |
+| `reports/` | Saved metrics, comparisons and experiment outputs |
+| `reports/figures/` | Visual outputs used in the README |
+| `app/` | Streamlit demo for EEG cognitive load inference |
+| `tests/` | Automated checks for structure, reports, figures, README quality and Python compilation |
+| GitHub Actions | Runs the test suite automatically on push and pull request |
+
+Current local test status:
+
+`10 passed`
 
 ## Tech Stack
 
@@ -377,21 +420,6 @@ streamlit run app/streamlit_app.py
 ## Resume Summary
 
 Built an EEG cognitive load detection pipeline using spectral bandpower features and raw EEG CNN modeling. Implemented subject-independent validation, leakage analysis, feature importance visualization, threshold tuning and an interactive Streamlit demo.
-
-## Limitations
-
-This project should be interpreted as a neurotechnology portfolio case study, not as a production-ready medical or BCI system.
-
-Main limitations:
-
-- the dataset is relatively small for robust EEG model generalization;
-- EEG windows from the same subject can inflate performance under window-level validation;
-- subject-independent validation is more realistic and should be treated as the primary evaluation setting;
-- model performance may be affected by subject-specific EEG patterns, recording conditions and preprocessing choices;
-- the CNN baseline is included as a methodological comparison, not as a final optimized architecture;
-- the project does not provide clinical, diagnostic or medical conclusions.
-
-The key methodological conclusion is that validation strategy matters more than the highest reported score. Window-level validation can look impressive, but subject-independent validation gives a more honest estimate of generalization to unseen users.
 
 
 ## License
